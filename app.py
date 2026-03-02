@@ -5,22 +5,22 @@ import seaborn as sns
 
 
 # ================================
-# PAGE CONFIGURATION
+# PAGE CONFIG
 # ================================
 
 st.set_page_config(
-    page_title="Interactive Sales Dashboard",
+    page_title="Interactive Dashboard",
     layout="wide"
 )
 
-st.title("📊 Interactive Sales Dashboard")
+st.title("📊 Interactive Business Dashboard")
 
 
 # ================================
 # FILE UPLOAD
 # ================================
 
-st.sidebar.header("Upload Sales Data")
+st.sidebar.header("Upload Data")
 
 uploaded_file = st.sidebar.file_uploader(
     "Upload CSV File",
@@ -34,7 +34,6 @@ uploaded_file = st.sidebar.file_uploader(
 
 if uploaded_file is not None:
 
-    # Load CSV
     df = pd.read_csv(uploaded_file)
 
     st.success("File Uploaded Successfully!")
@@ -49,102 +48,135 @@ if uploaded_file is not None:
 
 
     # ================================
-    # SIDEBAR FILTERS
+    # COLUMN SELECTION
     # ================================
 
-    st.sidebar.header("Filters")
-
-    # Region Filter
-    if "Region" in df.columns:
-        region_filter = st.sidebar.multiselect(
-            "Select Region",
-            df["Region"].unique()
-        )
-    else:
-        region_filter = []
+    st.sidebar.header("Select Columns")
 
 
-    # Category Filter
-    if "Category" in df.columns:
-        category_filter = st.sidebar.multiselect(
-            "Select Category",
-            df["Category"].unique()
-        )
-    else:
-        category_filter = []
+    numeric_cols = df.select_dtypes(include=["int64","float64"]).columns.tolist()
 
 
-    # Apply Filters
+    if len(numeric_cols) == 0:
+        st.error("No numeric columns found in file.")
+        st.stop()
+
+
+    sales_col = st.sidebar.selectbox(
+        "Select Sales / Revenue Column",
+        numeric_cols
+    )
+
+
+    profit_col = st.sidebar.selectbox(
+        "Select Profit Column (Optional)",
+        ["None"] + numeric_cols
+    )
+
+
+    region_col = st.sidebar.selectbox(
+        "Select Region Column (Optional)",
+        ["None"] + df.columns.tolist()
+    )
+
+
+    category_col = st.sidebar.selectbox(
+        "Select Category Column (Optional)",
+        ["None"] + df.columns.tolist()
+    )
+
+
+    # ================================
+    # FILTERS
+    # ================================
+
     filtered_df = df.copy()
 
-    if region_filter:
-        filtered_df = filtered_df[
-            filtered_df["Region"].isin(region_filter)
-        ]
 
-    if category_filter:
-        filtered_df = filtered_df[
-            filtered_df["Category"].isin(category_filter)
-        ]
+    if region_col != "None":
+
+        regions = st.sidebar.multiselect(
+            "Filter Region",
+            df[region_col].unique()
+        )
+
+        if regions:
+            filtered_df = filtered_df[
+                filtered_df[region_col].isin(regions)
+            ]
+
+
+    if category_col != "None":
+
+        categories = st.sidebar.multiselect(
+            "Filter Category",
+            df[category_col].unique()
+        )
+
+        if categories:
+            filtered_df = filtered_df[
+                filtered_df[category_col].isin(categories)
+            ]
 
 
     # ================================
-    # KPI CARDS
+    # KPI SECTION
     # ================================
 
     st.subheader("📌 Key Performance Indicators")
 
 
-    total_sales = filtered_df["Sales"].sum()
-    total_profit = filtered_df["Profit"].sum()
-    total_orders = filtered_df["Order_ID"].nunique()
-    avg_sales = filtered_df["Sales"].mean()
+    total_sales = filtered_df[sales_col].sum()
+
+    avg_sales = filtered_df[sales_col].mean()
 
 
-    col1, col2, col3, col4 = st.columns(4)
+    if profit_col != "None":
+        total_profit = filtered_df[profit_col].sum()
+    else:
+        total_profit = 0
 
-    col1.metric("Total Sales", f"₹{round(total_sales,2)}")
-    col2.metric("Total Profit", f"₹{round(total_profit,2)}")
-    col3.metric("Total Orders", total_orders)
-    col4.metric("Average Sales", f"₹{round(avg_sales,2)}")
+
+    col1, col2, col3 = st.columns(3)
+
+
+    col1.metric("Total Value", round(total_sales,2))
+
+    col2.metric("Average Value", round(avg_sales,2))
+
+    col3.metric("Total Profit", round(total_profit,2))
 
 
     # ================================
-    # SALES BY REGION
+    # BAR CHART
     # ================================
 
-    if "Region" in filtered_df.columns:
+    if region_col != "None":
 
-        st.subheader("🌍 Sales by Region")
+        st.subheader("🌍 Value by Region")
 
         fig1, ax1 = plt.subplots()
 
-        region_sales = filtered_df.groupby("Region")["Sales"].sum()
+        region_data = filtered_df.groupby(region_col)[sales_col].sum()
 
-        region_sales.plot(
-            kind="bar",
-            ax=ax1
-        )
-
-        ax1.set_xlabel("Region")
-        ax1.set_ylabel("Total Sales")
+        region_data.plot(kind="bar", ax=ax1)
 
         st.pyplot(fig1)
 
 
     # ================================
-    # CATEGORY WISE SALES
+    # CATEGORY CHART
     # ================================
 
-    if "Category" in filtered_df.columns:
+    if category_col != "None":
 
-        st.subheader("📦 Category-wise Sales")
+        st.subheader("📦 Category Analysis")
 
         fig2, ax2 = plt.subplots()
 
         sns.barplot(
-            x="Category",
-            y="Sales",
+            x=category_col,
+            y=sales_col,
             data=filtered_df,
             ax=ax2
         )
@@ -153,89 +185,56 @@ if uploaded_file is not None:
 
 
     # ================================
-    # SALES TREND
+    # SCATTER PLOT
     # ================================
 
-    if "Order_Date" in filtered_df.columns:
+    if profit_col != "None":
 
-        st.subheader("📈 Sales Trend Over Time")
-
-        filtered_df["Order_Date"] = pd.to_datetime(
-            filtered_df["Order_Date"]
-        )
-
-        time_sales = filtered_df.groupby("Order_Date")["Sales"].sum()
+        st.subheader("💰 Value vs Profit")
 
         fig3, ax3 = plt.subplots()
 
-        ax3.plot(time_sales.index, time_sales.values)
-
-        ax3.set_xlabel("Date")
-        ax3.set_ylabel("Sales")
+        sns.scatterplot(
+            x=sales_col,
+            y=profit_col,
+            data=filtered_df,
+            ax=ax3
+        )
 
         st.pyplot(fig3)
 
 
     # ================================
-    # PROFIT VS SALES
+    # TOP RECORDS
     # ================================
 
-    if "Profit" in filtered_df.columns:
+    st.subheader("🏆 Top 10 Records")
 
-        st.subheader("💰 Sales vs Profit")
+    top10 = filtered_df.sort_values(
+        by=sales_col,
+        ascending=False
+    ).head(10)
 
-        fig4, ax4 = plt.subplots()
-
-        sns.scatterplot(
-            x="Sales",
-            y="Profit",
-            data=filtered_df,
-            ax=ax4
-        )
-
-        st.pyplot(fig4)
+    st.dataframe(top10)
 
 
     # ================================
-    # TOP PRODUCTS
+    # INSIGHTS
     # ================================
 
-    if "Product" in filtered_df.columns:
-
-        st.subheader("🏆 Top 10 Products by Sales")
-
-        top_products = filtered_df.groupby("Product")["Sales"] \
-                                  .sum() \
-                                  .sort_values(ascending=False) \
-                                  .head(10)
-
-        st.dataframe(top_products)
+    st.subheader("🧠 Auto Insights")
 
 
-    # ================================
-    # BUSINESS INSIGHTS
-    # ================================
+    st.info(f"📌 Highest Value: {round(filtered_df[sales_col].max(),2)}")
 
-    st.subheader("🧠 Business Insights")
+    st.info(f"📌 Lowest Value: {round(filtered_df[sales_col].min(),2)}")
 
-
-    if "Region" in filtered_df.columns:
-        best_region = filtered_df.groupby("Region")["Sales"].sum().idxmax()
-        st.info(f"📌 Highest Sales Region: {best_region}")
-
-
-    if "Category" in filtered_df.columns:
-        best_category = filtered_df.groupby("Category")["Sales"].sum().idxmax()
-        st.info(f"📌 Best Performing Category: {best_category}")
+    st.info(f"📌 Average Value: {round(avg_sales,2)}")
 
 
     st.success("Dashboard Generated Successfully!")
 
 
-# ================================
-# NO FILE MESSAGE
-# ================================
-
 else:
 
-    st.warning("⚠️ Please Upload a CSV File to Continue.")
+    st.warning("Please Upload a CSV File to Start")
